@@ -25,22 +25,40 @@ WEATHER_LAT = 47.3769  # Zürich
 WEATHER_LON = 8.5417
 
 def get_weather():
-    """Fetch current weather from OpenWeatherMap. Returns (temp_celsius, description) or (None, None) on error."""
+    """Fetch current weather + today's high/low from OpenWeatherMap.
+    Returns (temp, temp_high, temp_low, description) or (None, None, None, None) on error."""
     try:
-        url = (
+        current_url = (
             f"https://api.openweathermap.org/data/2.5/weather"
             f"?lat={WEATHER_LAT}&lon={WEATHER_LON}"
             f"&appid={OPENWEATHER_API_KEY}&units=metric"
         )
-        response = requests.get(url, timeout=10)
-        response.raise_for_status()
-        data = response.json()
-        temp = round(data["main"]["temp"])
-        description = data["weather"][0]["description"].capitalize()
-        return temp, description
+        current_resp = requests.get(current_url, timeout=10)
+        current_resp.raise_for_status()
+        current = current_resp.json()
+        temp = round(current["main"]["temp"])
+        description = current["weather"][0]["description"].capitalize()
+
+        forecast_url = (
+            f"https://api.openweathermap.org/data/2.5/forecast"
+            f"?lat={WEATHER_LAT}&lon={WEATHER_LON}"
+            f"&appid={OPENWEATHER_API_KEY}&units=metric&cnt=16"
+        )
+        forecast_resp = requests.get(forecast_url, timeout=10)
+        forecast_resp.raise_for_status()
+        forecast = forecast_resp.json()
+
+        today = datetime.now().strftime("%Y-%m-%d")
+        today_temps = [e["main"]["temp"] for e in forecast["list"] if e["dt_txt"].startswith(today)]
+        if not today_temps:
+            today_temps = [temp]
+        temp_high = round(max(today_temps))
+        temp_low = round(min(today_temps))
+
+        return temp, temp_high, temp_low, description
     except requests.exceptions.RequestException as err:
         logging.error("Weather error: %s", err)
-        return None, None
+        return None, None, None, None
 
 def departure_to_minutes(departure_time):
     departure_datetime = datetime.strptime(departure_time, "%Y-%m-%dT%H:%M:%S%z")
@@ -134,10 +152,10 @@ def update_display():
     draw.text((10, 80), Time, fill=0, font=font_date_time)
 
     # Add weather
-    temp, description = get_weather()
+    temp, temp_high, temp_low, description = get_weather()
     if temp is not None:
-        draw.text((10, 110), f"{temp}\u00b0C", fill=0, font=font_date_time)
-        draw.text((10, 135), description, fill=0, font=font_date_time)
+        draw.text((10, 110), f"{temp}\u00b0C  {description}", fill=0, font=font_date_time)
+        draw.text((10, 135), f"H: {temp_high}\u00b0  L: {temp_low}\u00b0", fill=0, font=font_date_time)
 
     # Add departures
     should_sleep, amount_to_sleep = draw_connections(draw)
