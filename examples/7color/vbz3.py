@@ -19,6 +19,29 @@ MINUTES_TO_DEPARTURE_LIMIT = 4
 stops = ["Stauffacher"]
 running = True
 
+# Weather API (https://openweathermap.org — free tier is sufficient)
+OPENWEATHER_API_KEY = "YOUR_API_KEY_HERE"
+WEATHER_LAT = 47.3769  # Zürich
+WEATHER_LON = 8.5417
+
+def get_weather():
+    """Fetch current weather from OpenWeatherMap. Returns (temp_celsius, description) or (None, None) on error."""
+    try:
+        url = (
+            f"https://api.openweathermap.org/data/2.5/weather"
+            f"?lat={WEATHER_LAT}&lon={WEATHER_LON}"
+            f"&appid={OPENWEATHER_API_KEY}&units=metric"
+        )
+        response = requests.get(url, timeout=10)
+        response.raise_for_status()
+        data = response.json()
+        temp = round(data["main"]["temp"])
+        description = data["weather"][0]["description"].capitalize()
+        return temp, description
+    except requests.exceptions.RequestException as err:
+        logging.error("Weather error: %s", err)
+        return None, None
+
 def departure_to_minutes(departure_time):
     departure_datetime = datetime.strptime(departure_time, "%Y-%m-%dT%H:%M:%S%z")
     current_datetime = datetime.now(departure_datetime.tzinfo)
@@ -109,6 +132,12 @@ def update_display():
     Date = time.strftime("%Y - %m - %d", time.localtime())
     draw.text((10, 50), Date, fill=0, font=font_date_time)
     draw.text((10, 100), Time, fill=0, font=font_date_time)
+
+    # Add weather
+    temp, description = get_weather()
+    if temp is not None:
+        draw.text((10, 130), f"{temp}\u00b0C", fill=0, font=font_date_time)
+        draw.text((10, 155), description, fill=0, font=font_date_time)
 
     # Add departures
     should_sleep, amount_to_sleep = draw_connections(draw)
