@@ -88,11 +88,13 @@ def draw_weather_symbol(draw, weather_id, x, y, size=20):
         draw.rectangle([cx0, cy0 + ch // 2, cx0 + cw, cy0 + ch], fill=0)
 
     def sun(sx, sy, sr, color=5):
-        """Filled circle + 4 cardinal rays."""
-        draw.ellipse([sx - sr, sy - sr, sx + sr, sy + sr], fill=color)
+        """Filled circle + 4 cardinal rays, each outlined in black."""
         for dx, dy in [(0, -1), (0, 1), (-1, 0), (1, 0)]:
             draw.line([sx + dx * (sr + 1), sy + dy * (sr + 1),
+                       sx + dx * (sr + 3), sy + dy * (sr + 3)], fill=0, width=4)
+            draw.line([sx + dx * (sr + 1), sy + dy * (sr + 1),
                        sx + dx * (sr + 3), sy + dy * (sr + 3)], fill=color, width=2)
+        draw.ellipse([sx - sr, sy - sr, sx + sr, sy + sr], fill=color, outline=0)
 
     ch = size * 2 // 3  # cloud height used by precipitation symbols
 
@@ -112,17 +114,18 @@ def draw_weather_symbol(draw, weather_id, x, y, size=20):
         draw.polygon([mid, y + ch - 2,
                       mid - 4, y + ch + 5,
                       mid + 1, y + ch + 5,
-                      mid - 3, y + size], fill=5)  # yellow bolt
+                      mid - 3, y + size], fill=5, outline=0)  # yellow bolt, black outline
 
     elif 300 <= weather_id < 600:           # Rain / drizzle — cloud + blue drops
         cloud(x, y, size, ch)
         for rx in [x + size // 5, x + size // 2, x + size * 4 // 5]:
+            draw.line([rx, y + ch + 1, rx - 2, y + size - 1], fill=0, width=4)
             draw.line([rx, y + ch + 1, rx - 2, y + size - 1], fill=3, width=2)
 
     elif 600 <= weather_id < 700:           # Snow — cloud + blue dots
         cloud(x, y, size, ch)
         for rx in [x + size // 5, x + size // 2, x + size * 4 // 5]:
-            draw.ellipse([rx - 2, y + ch + 2, rx + 2, y + ch + 6], fill=3)
+            draw.ellipse([rx - 2, y + ch + 2, rx + 2, y + ch + 6], fill=3, outline=0)
 
     else:                                   # Fog / mist / atmosphere — horizontal bars
         for i in range(3):
@@ -265,9 +268,9 @@ def update_display():
     # Add weather
     temp, temp_high, temp_low, description, weather_id, wind_speed = get_weather()
     if temp is not None:
-        draw_weather_symbol(draw, weather_id, x=10, y=90, size=20)
-        draw.text((34, 90), f"{temp}\u00b0C  {description}", fill=0, font=font_weather)
-        draw.text((10, 115), f"H: {temp_high}\u00b0  L: {temp_low}\u00b0", fill=0, font=font_weather)
+        draw_weather_symbol(draw, weather_id, x=10, y=85, size=20)
+        draw.text((34, 85), f"{temp}\u00b0C  {description}", fill=0, font=font_weather)
+        draw.text((10, 110), f"H: {temp_high}\u00b0  L: {temp_low}\u00b0", fill=0, font=font_weather)
         outfit = get_clothing_recommendation(temp, temp_low, weather_id, wind_speed)
         draw.text((10, 133), "Mia should wear today:", fill=0, font=font_small)
         for i, line in enumerate(outfit):
