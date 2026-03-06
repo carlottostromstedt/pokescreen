@@ -12,7 +12,9 @@ from datetime import datetime, timedelta
 
 # Fonts
 font_departures = ImageFont.load("vbz-font.pil")
-font_date_time = ImageFont.truetype("Roboto-Bold.ttf", 18)
+font_date = ImageFont.truetype("Roboto-Bold.ttf", 18)
+font_time = ImageFont.truetype("Roboto-Bold.ttf", 16)
+font_weather = ImageFont.truetype("Roboto-Bold.ttf", 16)
 
 # Constants
 MINUTES_TO_DEPARTURE_LIMIT = 4
@@ -26,7 +28,7 @@ WEATHER_LON = 8.5417
 
 def get_weather():
     """Fetch current weather + today's high/low from OpenWeatherMap.
-    Returns (temp, temp_high, temp_low, description) or (None, None, None, None) on error."""
+    Returns (temp, temp_high, temp_low, description, weather_id, wind_speed) or all-None tuple on error."""
     try:
         current_url = (
             f"https://api.openweathermap.org/data/2.5/weather"
@@ -38,6 +40,8 @@ def get_weather():
         current = current_resp.json()
         temp = round(current["main"]["temp"])
         description = current["weather"][0]["description"].capitalize()
+        weather_id = current["weather"][0]["id"]
+        wind_speed = current.get("wind", {}).get("speed", 0)  # m/s
 
         forecast_url = (
             f"https://api.openweathermap.org/data/2.5/forecast"
@@ -55,10 +59,49 @@ def get_weather():
         temp_high = round(max(today_temps))
         temp_low = round(min(today_temps))
 
-        return temp, temp_high, temp_low, description
+        return temp, temp_high, temp_low, description, weather_id, wind_speed
     except requests.exceptions.RequestException as err:
         logging.error("Weather error: %s", err)
-        return None, None, None, None
+        return None, None, None, None, None, None
+
+
+def get_clothing_recommendation(temp, temp_low, weather_id, wind_speed):
+    """Returns 1–2 short clothing recommendation strings based on weather conditions."""
+    is_rain = 200 <= weather_id < 600   # thunderstorm, drizzle, rain
+    is_snow = 600 <= weather_id < 700
+    is_windy = wind_speed >= 6          # ~22 km/h
+
+    # Main outer layer
+    if temp < 0:
+        layer = "Heavy winter jacket"
+    elif temp < 8:
+        layer = "Winter jacket"
+    elif temp < 14:
+        layer = "Light jacket"
+    elif temp < 19:
+        layer = "Hoodie / cardigan"
+    else:
+        layer = "T-shirt"
+
+    # Precipitation modifier
+    if is_snow:
+        layer += " + boots"
+    elif is_rain and temp >= 14:
+        layer = "Rain jacket"
+    elif is_rain:
+        layer += " + umbrella"
+
+    # Accessories: gloves/hat and scarf
+    acc = ""
+    if temp < 5:
+        acc = "Gloves & winter hat"
+    elif temp < 10:
+        acc = "Consider gloves & hat"
+
+    if is_windy and temp < 15:
+        acc = (acc + " + scarf") if acc else "Scarf (it's windy!)"
+
+    return [layer, acc] if acc else [layer]
 
 def departure_to_minutes(departure_time):
     departure_datetime = datetime.strptime(departure_time, "%Y-%m-%dT%H:%M:%S%z")
@@ -148,14 +191,17 @@ def update_display():
     adjusted_time = now + timedelta(hours=1, minutes=1)
     Time = adjusted_time.strftime("%H : %M")
     Date = time.strftime("%Y - %m - %d", time.localtime())
-    draw.text((10, 50), Date, fill=0, font=font_date_time)
-    draw.text((10, 80), Time, fill=0, font=font_date_time)
+    draw.text((10, 50), Date, fill=0, font=font_date)
+    draw.text((10, 80), Time, fill=0, font=font_time)
 
     # Add weather
-    temp, temp_high, temp_low, description = get_weather()
+    temp, temp_high, temp_low, description, weather_id, wind_speed = get_weather()
     if temp is not None:
-        draw.text((10, 110), f"{temp}\u00b0C  {description}", fill=0, font=font_date_time)
-        draw.text((10, 135), f"H: {temp_high}\u00b0  L: {temp_low}\u00b0", fill=0, font=font_date_time)
+        draw.text((10, 110), f"{temp}\u00b0C  {description}", fill=0, font=font_weather)
+        draw.text((10, 135), f"H: {temp_high}\u00b0  L: {temp_low}\u00b0", fill=0, font=font_weather)
+        outfit = get_clothing_recommendation(temp, temp_low, weather_id, wind_speed)
+        for i, line in enumerate(outfit):
+            draw.text((10, 160 + i * 20), line, fill=0, font=font_weather)
 
     # Add departures
     should_sleep, amount_to_sleep = draw_connections(draw)
