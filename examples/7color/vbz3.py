@@ -15,6 +15,7 @@ font_departures = ImageFont.load("vbz-font.pil")
 font_date = ImageFont.truetype("Roboto-Bold.ttf", 18)
 font_time = ImageFont.truetype("Roboto-Bold.ttf", 16)
 font_weather = ImageFont.truetype("Roboto-Bold.ttf", 16)
+font_small = ImageFont.truetype("Roboto-Bold.ttf", 14)
 
 # Constants
 MINUTES_TO_DEPARTURE_LIMIT = 4
@@ -25,10 +26,21 @@ running = True
 OPENWEATHER_API_KEY = "YOUR_API_KEY_HERE"
 WEATHER_LAT = 47.3769  # Zürich
 WEATHER_LON = 8.5417
+WEATHER_CACHE_SECONDS = 3600  # refresh at most once per hour
+
+_weather_cache = None
+_weather_cache_time = None
 
 def get_weather():
     """Fetch current weather + today's high/low from OpenWeatherMap.
-    Returns (temp, temp_high, temp_low, description, weather_id, wind_speed) or all-None tuple on error."""
+    Returns (temp, temp_high, temp_low, description, weather_id, wind_speed) or all-None tuple on error.
+    Results are cached for WEATHER_CACHE_SECONDS to preserve API quota."""
+    global _weather_cache, _weather_cache_time
+    if _weather_cache is not None and _weather_cache_time is not None:
+        age = (datetime.now() - _weather_cache_time).total_seconds()
+        if age < WEATHER_CACHE_SECONDS:
+            print(f"Using cached weather data (age: {int(age)}s)")
+            return _weather_cache
     try:
         current_url = (
             f"https://api.openweathermap.org/data/2.5/weather"
@@ -59,10 +71,12 @@ def get_weather():
         temp_high = round(max(today_temps))
         temp_low = round(min(today_temps))
 
-        return temp, temp_high, temp_low, description, weather_id, wind_speed
+        _weather_cache = (temp, temp_high, temp_low, description, weather_id, wind_speed)
+        _weather_cache_time = datetime.now()
+        return _weather_cache
     except requests.exceptions.RequestException as err:
         logging.error("Weather error: %s", err)
-        return None, None, None, None, None, None
+        return _weather_cache if _weather_cache is not None else (None, None, None, None, None, None)
 
 
 def get_clothing_recommendation(temp, temp_low, weather_id, wind_speed):
@@ -70,6 +84,7 @@ def get_clothing_recommendation(temp, temp_low, weather_id, wind_speed):
     is_rain = 200 <= weather_id < 600   # thunderstorm, drizzle, rain
     is_snow = 600 <= weather_id < 700
     is_windy = wind_speed >= 6          # ~22 km/h
+    is_sunny = weather_id in (800, 801) # clear sky or few clouds
 
     # Main outer layer
     if temp < 0:
@@ -91,15 +106,17 @@ def get_clothing_recommendation(temp, temp_low, weather_id, wind_speed):
     elif is_rain:
         layer += " + umbrella"
 
-    # Accessories: gloves/hat and scarf
-    acc = ""
+    # Accessories — show the most important for current conditions
     if temp < 5:
-        acc = "Gloves & winter hat"
+        acc = "Gloves & winter hat" + (" + scarf" if is_windy else "")
     elif temp < 10:
-        acc = "Consider gloves & hat"
-
-    if is_windy and temp < 15:
-        acc = (acc + " + scarf") if acc else "Scarf (it's windy!)"
+        acc = "Consider gloves & hat" + (" + scarf" if is_windy else "")
+    elif is_windy and temp < 15:
+        acc = "Scarf (it's windy!)"
+    elif is_sunny:
+        acc = "Sunglasses or cap"
+    else:
+        acc = ""
 
     return [layer, acc] if acc else [layer]
 
@@ -200,8 +217,9 @@ def update_display():
         draw.text((10, 110), f"{temp}\u00b0C  {description}", fill=0, font=font_weather)
         draw.text((10, 135), f"H: {temp_high}\u00b0  L: {temp_low}\u00b0", fill=0, font=font_weather)
         outfit = get_clothing_recommendation(temp, temp_low, weather_id, wind_speed)
+        draw.text((10, 153), "Mia should wear today:", fill=0, font=font_small)
         for i, line in enumerate(outfit):
-            draw.text((10, 160 + i * 20), line, fill=0, font=font_weather)
+            draw.text((10, 168 + i * 16), line, fill=0, font=font_small)
 
     # Add departures
     should_sleep, amount_to_sleep = draw_connections(draw)
