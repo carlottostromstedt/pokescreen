@@ -55,20 +55,17 @@ def get_weather():
         weather_id = current["weather"][0]["id"]
         wind_speed = current.get("wind", {}).get("speed", 0)  # m/s
 
-        forecast_url = (
-            f"https://api.openweathermap.org/data/2.5/forecast"
-            f"?lat={WEATHER_LAT}&lon={WEATHER_LON}"
-            f"&appid={OPENWEATHER_API_KEY}&units=metric&cnt=16"
+        meteo_url = (
+            f"https://api.open-meteo.com/v1/forecast"
+            f"?latitude={WEATHER_LAT}&longitude={WEATHER_LON}"
+            f"&daily=temperature_2m_max,temperature_2m_min"
+            f"&timezone=Europe/Zurich&forecast_days=1"
         )
-        forecast_resp = requests.get(forecast_url, timeout=10)
-        forecast_resp.raise_for_status()
-        forecast = forecast_resp.json()
-        today = datetime.now().strftime("%Y-%m-%d")
-        today_temps = [e["main"]["temp"] for e in forecast["list"] if e["dt_txt"].startswith(today)]
-        if not today_temps:
-            today_temps = [temp]
-        temp_high = round(max(today_temps))
-        temp_low = round(min(today_temps))
+        meteo_resp = requests.get(meteo_url, timeout=10)
+        meteo_resp.raise_for_status()
+        meteo = meteo_resp.json()
+        temp_high = round(meteo["daily"]["temperature_2m_max"][0])
+        temp_low = round(meteo["daily"]["temperature_2m_min"][0])
 
         _weather_cache = (temp, temp_high, temp_low, description, weather_id, wind_speed)
         _weather_cache_time = datetime.now()
