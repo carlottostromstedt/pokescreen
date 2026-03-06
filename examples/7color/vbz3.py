@@ -79,6 +79,57 @@ def get_weather():
         return _weather_cache if _weather_cache is not None else (None, None, None, None, None, None)
 
 
+def draw_weather_symbol(draw, weather_id, x, y, size=20):
+    """Draw a simple weather icon at (x, y) in a size×size box using palette indices as fill colors."""
+    def cloud(cx0, cy0, cw, ch):
+        """Two overlapping ellipses + bottom rectangle = recognisable cloud."""
+        draw.ellipse([cx0, cy0 + ch // 3, cx0 + cw * 2 // 3, cy0 + ch], fill=0)
+        draw.ellipse([cx0 + cw // 4, cy0, cx0 + cw, cy0 + ch * 2 // 3], fill=0)
+        draw.rectangle([cx0, cy0 + ch // 2, cx0 + cw, cy0 + ch], fill=0)
+
+    def sun(sx, sy, sr, color=5):
+        """Filled circle + 4 cardinal rays."""
+        draw.ellipse([sx - sr, sy - sr, sx + sr, sy + sr], fill=color)
+        for dx, dy in [(0, -1), (0, 1), (-1, 0), (1, 0)]:
+            draw.line([sx + dx * (sr + 1), sy + dy * (sr + 1),
+                       sx + dx * (sr + 3), sy + dy * (sr + 3)], fill=color, width=2)
+
+    ch = size * 2 // 3  # cloud height used by precipitation symbols
+
+    if weather_id == 800:                   # Clear sky — sun
+        sun(x + size // 2, y + size // 2, size // 3)
+
+    elif weather_id == 801:                 # Few clouds — sun peeking behind cloud
+        sun(x + size // 4, y + size // 4, size // 5, color=5)
+        cloud(x + size // 5, y + size // 3, size * 4 // 5, size * 2 // 3)
+
+    elif 802 <= weather_id <= 804:          # Cloudy / overcast
+        cloud(x, y + size // 6, size, size * 5 // 6)
+
+    elif 200 <= weather_id < 300:           # Thunderstorm — cloud + lightning bolt
+        cloud(x, y, size, ch)
+        mid = x + size // 2
+        draw.polygon([mid, y + ch - 2,
+                      mid - 4, y + ch + 5,
+                      mid + 1, y + ch + 5,
+                      mid - 3, y + size], fill=5)  # yellow bolt
+
+    elif 300 <= weather_id < 600:           # Rain / drizzle — cloud + blue drops
+        cloud(x, y, size, ch)
+        for rx in [x + size // 5, x + size // 2, x + size * 4 // 5]:
+            draw.line([rx, y + ch + 1, rx - 2, y + size - 1], fill=3, width=2)
+
+    elif 600 <= weather_id < 700:           # Snow — cloud + blue dots
+        cloud(x, y, size, ch)
+        for rx in [x + size // 5, x + size // 2, x + size * 4 // 5]:
+            draw.ellipse([rx - 2, y + ch + 2, rx + 2, y + ch + 6], fill=3)
+
+    else:                                   # Fog / mist / atmosphere — horizontal bars
+        for i in range(3):
+            draw.line([x + 2, y + size // 5 + i * (size // 4),
+                       x + size - 2, y + size // 5 + i * (size // 4)], fill=0, width=2)
+
+
 def get_clothing_recommendation(temp, temp_low, weather_id, wind_speed):
     """Returns 1–2 short clothing recommendation strings based on weather conditions."""
     is_rain = 200 <= weather_id < 600   # thunderstorm, drizzle, rain
@@ -208,18 +259,19 @@ def update_display():
     adjusted_time = now + timedelta(hours=1, minutes=1)
     Time = adjusted_time.strftime("%H : %M")
     Date = time.strftime("%Y - %m - %d", time.localtime())
-    draw.text((10, 50), Date, fill=0, font=font_date)
-    draw.text((10, 80), Time, fill=0, font=font_time)
+    draw.text((10, 20), Date, fill=0, font=font_date)
+    draw.text((10, 50), Time, fill=0, font=font_time)
 
     # Add weather
     temp, temp_high, temp_low, description, weather_id, wind_speed = get_weather()
     if temp is not None:
-        draw.text((10, 110), f"{temp}\u00b0C  {description}", fill=0, font=font_weather)
-        draw.text((10, 135), f"H: {temp_high}\u00b0  L: {temp_low}\u00b0", fill=0, font=font_weather)
+        draw_weather_symbol(draw, weather_id, x=10, y=90, size=20)
+        draw.text((34, 90), f"{temp}\u00b0C  {description}", fill=0, font=font_weather)
+        draw.text((10, 115), f"H: {temp_high}\u00b0  L: {temp_low}\u00b0", fill=0, font=font_weather)
         outfit = get_clothing_recommendation(temp, temp_low, weather_id, wind_speed)
-        draw.text((10, 153), "Mia should wear today:", fill=0, font=font_small)
+        draw.text((10, 133), "Mia should wear today:", fill=0, font=font_small)
         for i, line in enumerate(outfit):
-            draw.text((10, 168 + i * 16), line, fill=0, font=font_small)
+            draw.text((10, 148 + i * 16), line, fill=0, font=font_small)
 
     # Add departures
     should_sleep, amount_to_sleep = draw_connections(draw)
