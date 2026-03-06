@@ -51,11 +51,24 @@ def get_weather():
         current_resp.raise_for_status()
         current = current_resp.json()
         temp = round(current["main"]["temp"])
-        temp_high = round(current["main"]["temp_max"])
-        temp_low = round(current["main"]["temp_min"])
         description = current["weather"][0]["description"].capitalize()
         weather_id = current["weather"][0]["id"]
         wind_speed = current.get("wind", {}).get("speed", 0)  # m/s
+
+        forecast_url = (
+            f"https://api.openweathermap.org/data/2.5/forecast"
+            f"?lat={WEATHER_LAT}&lon={WEATHER_LON}"
+            f"&appid={OPENWEATHER_API_KEY}&units=metric&cnt=16"
+        )
+        forecast_resp = requests.get(forecast_url, timeout=10)
+        forecast_resp.raise_for_status()
+        forecast = forecast_resp.json()
+        today = datetime.now().strftime("%Y-%m-%d")
+        today_temps = [e["main"]["temp"] for e in forecast["list"] if e["dt_txt"].startswith(today)]
+        if not today_temps:
+            today_temps = [temp]
+        temp_high = round(max(today_temps))
+        temp_low = round(min(today_temps))
 
         _weather_cache = (temp, temp_high, temp_low, description, weather_id, wind_speed)
         _weather_cache_time = datetime.now()
