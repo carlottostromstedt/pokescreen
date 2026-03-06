@@ -131,13 +131,13 @@ def update_display():
     Time = adjusted_time.strftime("%H : %M")
     Date = time.strftime("%Y - %m - %d", time.localtime())
     draw.text((10, 50), Date, fill=0, font=font_date_time)
-    draw.text((10, 100), Time, fill=0, font=font_date_time)
+    draw.text((10, 80), Time, fill=0, font=font_date_time)
 
     # Add weather
     temp, description = get_weather()
     if temp is not None:
-        draw.text((10, 130), f"{temp}\u00b0C", fill=0, font=font_date_time)
-        draw.text((10, 155), description, fill=0, font=font_date_time)
+        draw.text((10, 110), f"{temp}\u00b0C", fill=0, font=font_date_time)
+        draw.text((10, 135), description, fill=0, font=font_date_time)
 
     # Add departures
     should_sleep, amount_to_sleep = draw_connections(draw)
