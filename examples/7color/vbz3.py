@@ -146,12 +146,12 @@ def get_clothing_recommendation(temp, temp_low, weather_id, wind_speed):
     elif is_rain:
         layer += " + umbrella"
 
-    # Accessories — show the most important for current conditions
-    if temp < 5:
+    # Accessories — based on temp_low so she's prepared for the coldest part of the day
+    if temp_low < 5:
         acc = "Gloves & winter hat" + (" + scarf" if is_windy else "")
-    elif temp < 10:
+    elif temp_low < 10:
         acc = "Consider gloves & hat" + (" + scarf" if is_windy else "")
-    elif is_windy and temp < 15:
+    elif is_windy and temp_low < 15:
         acc = "Scarf (it's windy!)"
     elif is_sunny:
         acc = "Sunglasses or cap"
