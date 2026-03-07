@@ -26,10 +26,22 @@ def get_random_japanese_card_image():
 
     return image_data
 
-if __name__ == "__main__":
-    image_data = get_random_japanese_card_image()
+DEST = "/home/developer/inky/examples/7color/images/poke_card.png"
+TMP  = "/home/developer/inky/examples/7color/images/poke_card.tmp"
+INTERVAL = 3600  # seconds between card changes
 
-    if image_data:
-        with open("/home/developer/inky/examples/7color/images/poke_card.png", "wb") as f:
-            f.write(image_data)
-        print("✅ Japanese card image saved as poke_card.png")
+if __name__ == "__main__":
+    import os
+    import time
+
+    while True:
+        try:
+            image_data = get_random_japanese_card_image()
+            if image_data:
+                with open(TMP, "wb") as f:
+                    f.write(image_data)
+                os.replace(TMP, DEST)  # atomic — vbz3.py never sees a partial file
+                print("✅ Card saved")
+        except Exception as e:
+            print(f"❌ Error fetching card: {e}")
+        time.sleep(INTERVAL)
