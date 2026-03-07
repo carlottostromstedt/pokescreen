@@ -158,7 +158,7 @@ def get_clothing_recommendation(temp, temp_high, temp_low, weather_code, wind_sp
     else:
         layer = "T-shirt"
 
-    if temp_low < 10 and temp_high > 15:
+    if layer == "Light coat / jacket" and temp_low < 10 and temp_high > 15:
         layer += " + sweater / vest"
 
     # Precipitation modifier
