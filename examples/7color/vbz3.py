@@ -22,18 +22,28 @@ MINUTES_TO_DEPARTURE_LIMIT = 4
 stops = ["Stauffacher"]
 running = True
 
-# Weather API (https://openweathermap.org — free tier is sufficient)
-OPENWEATHER_API_KEY = "xxxxx"
+# Weather — Open-Meteo (https://open-meteo.com, free, no API key)
 WEATHER_LAT = 47.3769  # Zürich
 WEATHER_LON = 8.5417
 WEATHER_CACHE_SECONDS = 3600  # refresh at most once per hour
+
+WMO_DESCRIPTIONS = {
+    0: "Clear sky",    1: "Mainly clear",   2: "Partly cloudy",  3: "Overcast",
+    45: "Foggy",       48: "Icy fog",
+    51: "Light drizzle", 53: "Drizzle",     55: "Heavy drizzle",
+    61: "Light rain",  63: "Rain",          65: "Heavy rain",
+    71: "Light snow",  73: "Snow",          75: "Heavy snow",    77: "Snow grains",
+    80: "Rain showers", 81: "Rain showers", 82: "Heavy showers",
+    85: "Snow showers", 86: "Heavy snow showers",
+    95: "Thunderstorm", 96: "Thunderstorm + hail", 99: "Thunderstorm + hail",
+}
 
 _weather_cache = None
 _weather_cache_time = None
 
 def get_weather():
-    """Fetch current weather + today's high/low from OpenWeatherMap.
-    Returns (temp, temp_high, temp_low, description, weather_id, wind_speed) or all-None tuple on error.
+    """Fetch current weather + today's high/low from Open-Meteo (no API key needed).
+    Returns (temp, temp_high, temp_low, description, weather_code, wind_speed) or all-None tuple on error.
     Results are cached for WEATHER_CACHE_SECONDS to preserve API quota."""
     global _weather_cache, _weather_cache_time
     if _weather_cache is not None and _weather_cache_time is not None:
@@ -42,32 +52,24 @@ def get_weather():
             print(f"Using cached weather data (age: {int(age)}s)")
             return _weather_cache
     try:
-        current_url = (
-            f"https://api.openweathermap.org/data/2.5/weather"
-            f"?lat={WEATHER_LAT}&lon={WEATHER_LON}"
-            f"&appid={OPENWEATHER_API_KEY}&units=metric"
-        )
-        current_resp = requests.get(current_url, timeout=10)
-        current_resp.raise_for_status()
-        current = current_resp.json()
-        temp = round(current["main"]["temp"])
-        description = current["weather"][0]["description"].capitalize()
-        weather_id = current["weather"][0]["id"]
-        wind_speed = current.get("wind", {}).get("speed", 0)  # m/s
-
-        meteo_url = (
+        url = (
             f"https://api.open-meteo.com/v1/forecast"
             f"?latitude={WEATHER_LAT}&longitude={WEATHER_LON}"
+            f"&current=temperature_2m,wind_speed_10m,weather_code"
             f"&daily=temperature_2m_max,temperature_2m_min"
-            f"&timezone=Europe/Zurich&forecast_days=1"
+            f"&wind_speed_unit=ms&timezone=Europe/Zurich&forecast_days=1"
         )
-        meteo_resp = requests.get(meteo_url, timeout=10)
-        meteo_resp.raise_for_status()
-        meteo = meteo_resp.json()
-        temp_high = round(meteo["daily"]["temperature_2m_max"][0])
-        temp_low = round(meteo["daily"]["temperature_2m_min"][0])
+        resp = requests.get(url, timeout=10)
+        resp.raise_for_status()
+        data = resp.json()
+        temp = round(data["current"]["temperature_2m"])
+        weather_code = data["current"]["weather_code"]
+        wind_speed = data["current"]["wind_speed_10m"]  # m/s
+        description = WMO_DESCRIPTIONS.get(weather_code, "Unknown")
+        temp_high = round(data["daily"]["temperature_2m_max"][0])
+        temp_low = round(data["daily"]["temperature_2m_min"][0])
 
-        _weather_cache = (temp, temp_high, temp_low, description, weather_id, wind_speed)
+        _weather_cache = (temp, temp_high, temp_low, description, weather_code, wind_speed)
         _weather_cache_time = datetime.now()
         return _weather_cache
     except requests.exceptions.RequestException as err:
@@ -75,7 +77,7 @@ def get_weather():
         return _weather_cache if _weather_cache is not None else (None, None, None, None, None, None)
 
 
-def draw_weather_symbol(draw, weather_id, x, y, size=20):
+def draw_weather_symbol(draw, weather_code, x, y, size=20):
     """Draw a simple weather icon at (x, y) in a size×size box using palette indices as fill colors."""
     def cloud(cx0, cy0, cw, ch):
         """Two overlapping ellipses + bottom rectangle = recognisable cloud."""
@@ -94,49 +96,57 @@ def draw_weather_symbol(draw, weather_id, x, y, size=20):
 
     ch = size * 2 // 3  # cloud height used by precipitation symbols
 
-    if weather_id == 800:                   # Clear sky — sun
+    if weather_code == 0:                                           # Clear sky
         sun(x + size // 2, y + size // 2, size // 3)
 
-    elif weather_id == 801:                 # Few clouds — sun peeking behind cloud
+    elif weather_code == 1:                                         # Mainly clear
+        sun(x + size // 2, y + size // 2, size // 3)
+
+    elif weather_code == 2:                                         # Partly cloudy — sun + cloud
         sun(x + size // 4, y + size // 4, size // 5, color=5)
         cloud(x + size // 5, y + size // 3, size * 4 // 5, size * 2 // 3)
 
-    elif 802 <= weather_id <= 804:          # Cloudy / overcast
+    elif weather_code == 3:                                         # Overcast
         cloud(x, y + size // 6, size, size * 5 // 6)
 
-    elif 200 <= weather_id < 300:           # Thunderstorm — cloud + lightning bolt
+    elif weather_code in (45, 48):                                  # Fog
+        for i in range(3):
+            draw.line([x + 2, y + size // 5 + i * (size // 4),
+                       x + size - 2, y + size // 5 + i * (size // 4)], fill=0, width=2)
+
+    elif weather_code in (95, 96, 99):                              # Thunderstorm
         cloud(x, y, size, ch)
         mid = x + size // 2
         draw.polygon([mid, y + ch - 2,
                       mid - 4, y + ch + 5,
                       mid + 1, y + ch + 5,
-                      mid - 3, y + size], fill=5, outline=0)  # yellow bolt, black outline
+                      mid - 3, y + size], fill=5, outline=0)
 
-    elif 300 <= weather_id < 600:           # Rain / drizzle — cloud + blue drops
+    elif weather_code in (51, 53, 55, 61, 63, 65, 66, 67, 80, 81, 82):  # Rain / drizzle
         cloud(x, y, size, ch)
         for rx in [x + size // 5, x + size // 2, x + size * 4 // 5]:
             draw.line([rx, y + ch + 1, rx - 2, y + size - 1], fill=0, width=4)
             draw.line([rx, y + ch + 1, rx - 2, y + size - 1], fill=3, width=2)
 
-    elif 600 <= weather_id < 700:           # Snow — cloud + blue dots
+    elif weather_code in (71, 73, 75, 77, 85, 86):                 # Snow
         cloud(x, y, size, ch)
         for rx in [x + size // 5, x + size // 2, x + size * 4 // 5]:
             draw.ellipse([rx - 2, y + ch + 2, rx + 2, y + ch + 6], fill=3, outline=0)
 
-    else:                                   # Fog / mist / atmosphere — horizontal bars
+    else:                                                           # Fallback
         for i in range(3):
             draw.line([x + 2, y + size // 5 + i * (size // 4),
                        x + size - 2, y + size // 5 + i * (size // 4)], fill=0, width=2)
 
 
-def get_clothing_recommendation(temp, temp_high, temp_low, weather_id, wind_speed):
+def get_clothing_recommendation(temp, temp_high, temp_low, weather_code, wind_speed):
     """Returns 1–2 short clothing recommendation strings based on weather conditions."""
-    is_rain = 200 <= weather_id < 600   # thunderstorm, drizzle, rain
-    is_snow = 600 <= weather_id < 700
-    is_windy = wind_speed >= 6          # ~22 km/h
-    is_sunny = weather_id in (800, 801) # clear sky or few clouds
+    is_rain = weather_code in (51, 53, 55, 61, 63, 65, 66, 67, 80, 81, 82, 95, 96, 99)
+    is_snow = weather_code in (71, 73, 75, 77, 85, 86)
+    is_windy = wind_speed >= 6          # m/s (~22 km/h)
+    is_sunny = weather_code in (0, 1)   # clear sky or mainly clear
 
-    # Main outer layer
+    # Main outer layer based on current temp
     if temp < 0:
         layer = "Heavy winter coat"
     elif temp < 8:
@@ -149,7 +159,7 @@ def get_clothing_recommendation(temp, temp_high, temp_low, weather_id, wind_spee
         layer = "T-shirt"
 
     if temp_low < 10 and temp_high > 15:
-	layer += " + sweater / vest"
+        layer += " + sweater / vest"
 
     # Precipitation modifier
     if is_snow:
@@ -170,7 +180,7 @@ def get_clothing_recommendation(temp, temp_high, temp_low, weather_id, wind_spee
         acc = ""
 
     if is_sunny:
-	acc += " + sunglasses"
+        acc = (acc + " + sunglasses") if acc else "Sunglasses or cap"
 
     return [layer, acc] if acc else [layer]
 
@@ -266,12 +276,12 @@ def update_display():
     draw.text((10, 50), Time, fill=0, font=font_time)
 
     # Add weather
-    temp, temp_high, temp_low, description, weather_id, wind_speed = get_weather()
+    temp, temp_high, temp_low, description, weather_code, wind_speed = get_weather()
     if temp is not None:
-        draw_weather_symbol(draw, weather_id, x=10, y=85, size=20)
+        draw_weather_symbol(draw, weather_code, x=10, y=85, size=20)
         draw.text((34, 85), f"{temp}\u00b0C  {description}", fill=0, font=font_weather)
         draw.text((10, 110), f"H: {temp_high}\u00b0  L: {temp_low}\u00b0", fill=0, font=font_weather)
-        outfit = get_clothing_recommendation(temp, temp_high, temp_low, weather_id, wind_speed)
+        outfit = get_clothing_recommendation(temp, temp_high, temp_low, weather_code, wind_speed)
         draw.text((10, 133), "Mia should wear today:", fill=0, font=font_small)
         for i, line in enumerate(outfit):
             draw.text((10, 148 + i * 16), line, fill=0, font=font_small)
