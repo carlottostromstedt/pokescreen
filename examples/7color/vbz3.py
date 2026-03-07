@@ -23,7 +23,7 @@ stops = ["Stauffacher"]
 running = True
 
 # Weather API (https://openweathermap.org — free tier is sufficient)
-OPENWEATHER_API_KEY = "YOUR_API_KEY_HERE"
+OPENWEATHER_API_KEY = "xxxxx"
 WEATHER_LAT = 47.3769  # Zürich
 WEATHER_LON = 8.5417
 WEATHER_CACHE_SECONDS = 3600  # refresh at most once per hour
@@ -129,7 +129,7 @@ def draw_weather_symbol(draw, weather_id, x, y, size=20):
                        x + size - 2, y + size // 5 + i * (size // 4)], fill=0, width=2)
 
 
-def get_clothing_recommendation(temp, temp_low, weather_id, wind_speed):
+def get_clothing_recommendation(temp, temp_high, temp_low, weather_id, wind_speed):
     """Returns 1–2 short clothing recommendation strings based on weather conditions."""
     is_rain = 200 <= weather_id < 600   # thunderstorm, drizzle, rain
     is_snow = 600 <= weather_id < 700
@@ -138,15 +138,18 @@ def get_clothing_recommendation(temp, temp_low, weather_id, wind_speed):
 
     # Main outer layer
     if temp < 0:
-        layer = "Heavy winter jacket"
+        layer = "Heavy winter coat"
     elif temp < 8:
-        layer = "Winter jacket"
+        layer = "Winter coat"
     elif temp < 14:
-        layer = "Light jacket"
+        layer = "Light coat / jacket"
     elif temp < 19:
         layer = "Hoodie / cardigan"
     else:
         layer = "T-shirt"
+
+    if temp_low < 10 and temp_high > 15:
+	layer += " + sweater / vest"
 
     # Precipitation modifier
     if is_snow:
@@ -163,10 +166,11 @@ def get_clothing_recommendation(temp, temp_low, weather_id, wind_speed):
         acc = "Consider gloves & hat" + (" + scarf" if is_windy else "")
     elif is_windy and temp_low < 15:
         acc = "Scarf (it's windy!)"
-    elif is_sunny:
-        acc = "Sunglasses or cap"
     else:
         acc = ""
+
+    if is_sunny:
+	acc += " + sunglasses"
 
     return [layer, acc] if acc else [layer]
 
@@ -267,7 +271,7 @@ def update_display():
         draw_weather_symbol(draw, weather_id, x=10, y=85, size=20)
         draw.text((34, 85), f"{temp}\u00b0C  {description}", fill=0, font=font_weather)
         draw.text((10, 110), f"H: {temp_high}\u00b0  L: {temp_low}\u00b0", fill=0, font=font_weather)
-        outfit = get_clothing_recommendation(temp, temp_low, weather_id, wind_speed)
+        outfit = get_clothing_recommendation(temp, temp_high, temp_low, weather_id, wind_speed)
         draw.text((10, 133), "Mia should wear today:", fill=0, font=font_small)
         for i, line in enumerate(outfit):
             draw.text((10, 148 + i * 16), line, fill=0, font=font_small)
