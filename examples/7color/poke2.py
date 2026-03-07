@@ -26,8 +26,8 @@ def get_random_japanese_card_image():
 
     return image_data
 
-DEST = "/home/developer/inky/examples/7color/images/poke_card.png"
-TMP  = "/home/developer/inky/examples/7color/images/poke_card.tmp"
+DEST = "/home/developer/github/pokescreen/examples/7color/images/poke_card.png"
+TMP  = "/home/developer/github/pokescreen/examples/7color/images/poke_card.tmp"
 INTERVAL = 600  # seconds between card changes
 
 if __name__ == "__main__":
